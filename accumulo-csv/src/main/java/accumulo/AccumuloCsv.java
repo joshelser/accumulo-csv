@@ -29,7 +29,7 @@ public class AccumuloCsv {
   
   public static void main(String[] args) throws Exception {
     AccumuloCsvOptions opts = new AccumuloCsvOptions();
-    JCommander jc = new JCommander();
+    JCommander jc = new JCommander(opts);
     
     jc.setProgramName("Accumulo CSV");
     

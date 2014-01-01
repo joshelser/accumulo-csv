@@ -25,10 +25,10 @@ import com.beust.jcommander.Parameter;
  */
 public class AccumuloCsvOptions {
 
-  @Parameter(names = {"--live"}, required = false, description = "Write mutations to Accumulo")
+  @Parameter(names = "--live", required = false, description = "Write mutations to Accumulo")
   private boolean liveIngest;
 
-  @Parameter(names = {"--bulk"}, required = false, description = "Create offline Accumulo files for import")
+  @Parameter(names = "--bulk", required = false, description = "Create offline Accumulo files for import")
   private boolean bulkIngest;
   
   @Parameter(names = {"-f", "--file"}, required = true, description = "Input CSV file(s)")
