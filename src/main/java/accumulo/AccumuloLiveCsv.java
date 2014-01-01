@@ -21,6 +21,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map.Entry;
 
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
@@ -34,6 +36,8 @@ import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.client.ZooKeeperInstance;
 import org.apache.accumulo.core.client.admin.TableOperations;
 import org.apache.accumulo.core.client.security.tokens.PasswordToken;
+import org.apache.accumulo.core.data.Mutation;
+import org.apache.accumulo.core.data.Value;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.io.Text;
 import org.slf4j.Logger;
@@ -41,12 +45,19 @@ import org.slf4j.LoggerFactory;
 
 import au.com.bytecode.opencsv.CSVReader;
 
+import com.google.common.base.Preconditions;
+
 /**
  * 
  */
-public class AccumuloLiveCsv implements Runnable, Closeable {
+public class AccumuloLiveCsv implements AccumuloCsvIngest {
   private static final Logger log = LoggerFactory.getLogger(AccumuloLiveCsv.class);
   private static final String ROW_SEPARATOR = ":";
+
+  public static final Text SCHEMA_COLUMN = new Text("col");
+  public static final Text SCHEMA_COLUMN_FREQ = new Text("freq");
+  public static final Text EMPTY_TEXT = new Text(new byte[0]);
+  public static final Value VALUE_ONE = new Value("1".getBytes());
 
   protected final ZooKeeperInstance instance;
   protected final Connector connector;
@@ -121,18 +132,20 @@ public class AccumuloLiveCsv implements Runnable, Closeable {
     FileReader fileReader = null;
     CSVReader reader = null;
     final Text rowId = new Text();
-    
+
     for (File f : inputs.getInputFiles()) {
       rowId.clear();
-      
-      String fileName;
+
+      String stringFileName;
       try {
-        fileName = f.getCanonicalPath() + ROW_SEPARATOR;
+        stringFileName = f.getCanonicalPath() + ROW_SEPARATOR;
       } catch (IOException e) {
         log.error("Could not determine path for file: {}", f, e);
         continue;
       }
       
+      Text fileName = new Text(stringFileName);
+
       try {
         try {
           fileReader = new FileReader(f);
@@ -152,7 +165,7 @@ public class AccumuloLiveCsv implements Runnable, Closeable {
         }
 
         try {
-          writeSchema(header);
+          writeSchema(fileName, header);
         } catch (AccumuloException e) {
           log.error("Could not write header to schema table", e);
           continue;
@@ -160,32 +173,32 @@ public class AccumuloLiveCsv implements Runnable, Closeable {
           log.error("Could not write header to schema table", e);
           continue;
         }
-        
+
         String[] record;
         long recordCount = 0l;
-        
+
         try {
           while (null != (record = reader.readNext())) {
-            // Make a rowId of "/path/to/filename:N" 
+            // Make a rowId of "/path/to/filename:N"
             final String rowSuffix = Long.toString(recordCount);
-            rowId.append(fileName.getBytes(), 0, fileName.length());
+            rowId.append(fileName.getBytes(), 0, fileName.getLength());
             rowId.append(rowSuffix.getBytes(), 0, rowSuffix.length());
-            
+
             try {
-              writeRecord(header, record, rowId);
+              writeRecord(header, record, rowId, fileName);
             } catch (AccumuloException e) {
-              
+              log.error("Could not write record to record table", e);
             } catch (AccumuloSecurityException e) {
-              
+              log.error("Could not write record to record table", e);
             }
-            
+
             recordCount++;
           }
         } catch (IOException e) {
           log.error("Error reading records from CSV file", e);
           continue;
         }
-        
+
       } finally {
         if (null != reader) {
           try {
@@ -206,7 +219,7 @@ public class AccumuloLiveCsv implements Runnable, Closeable {
     }
   }
 
-  protected void writeSchema(String[] header) throws AccumuloException, AccumuloSecurityException {
+  protected void writeSchema(Text fileName, String[] header) throws AccumuloException, AccumuloSecurityException {
     final BatchWriter bw;
     try {
       bw = mtbw.getBatchWriter(schemaTableName);
@@ -215,10 +228,23 @@ public class AccumuloLiveCsv implements Runnable, Closeable {
       throw new RuntimeException(e);
     }
 
-    // do stuff
+    final Value emptyValue = new Value(new byte[0]);
+    // track existence of column in schema
+    for (String columnName : header) {
+      Mutation m = new Mutation(columnName);
+      m.put(SCHEMA_COLUMN, fileName, emptyValue);
+
+      bw.addMutation(m);
+    }
+
+    // TODO flush every Nth (or not at all?)
+    bw.flush();
   }
 
-  protected void writeRecord(String[] header, String[] record, Text rowId) throws AccumuloException, AccumuloSecurityException {
+  protected void writeRecord(String[] header, String[] record, Text rowId, Text fileName) throws AccumuloException, AccumuloSecurityException {
+    Preconditions.checkArgument(header.length >= record.length, "Cannot have more columns in record (%s) than defined in header (%s)", 
+        new Object[] { header.length, record.length});
+    
     final BatchWriter recordBw, schemaBw;
     try {
       recordBw = mtbw.getBatchWriter(recordTableName);
@@ -228,6 +254,38 @@ public class AccumuloLiveCsv implements Runnable, Closeable {
       throw new RuntimeException(e);
     }
 
+    // Some temp Texts to avoid lots of object allocations
+    final Text cfHolder = new Text();
+    final HashMap<String,Long> counts = new HashMap<String,Long>();
+    
+    // write records
+    Mutation recordMutation = new Mutation(rowId);
+    for (int i = 0; i < record.length; i++) {
+      final String columnName = header[i];
+      final String columnValue = record[i];
+      
+      if (counts.containsKey(columnName)) {
+        counts.put(columnName, counts.get(columnName) + 1);
+      } else {
+        counts.put(columnName, 1l);
+      }
+      
+      cfHolder.set(columnName);
+      
+      recordMutation.put(cfHolder, EMPTY_TEXT, new Value(columnValue.getBytes()));
+    }
+    
+    recordBw.addMutation(recordMutation);
+    
+    // update counts in schema
+    for (Entry<String,Long> schemaUpdate : counts.entrySet()) {
+      Mutation schemaMutation = new Mutation(schemaUpdate.getKey());
+      schemaMutation.put(SCHEMA_COLUMN_FREQ, fileName, VALUE_ONE);
+      schemaBw.addMutation(schemaMutation);
+    }
+    
+    // TODO flush every Nth (or not at all?)
+    schemaBw.flush();
+    recordBw.flush();
   }
-
 }

@@ -16,26 +16,11 @@
  */
 package accumulo;
 
-import java.io.IOException;
+import java.io.Closeable;
 
 /**
  * 
  */
-public class AccumuloBulkCsv implements AccumuloCsvIngest {
+public interface AccumuloCsvIngest extends Runnable, Closeable {
 
-  public AccumuloBulkCsv(AccumuloCsvOptions opts) {
-    
-  }
-
-  @Override
-  public void run() {
-    // TODO Auto-generated method stub
-    
-  }
-
-  @Override
-  public void close() throws IOException {
-    // TODO Auto-generated method stub
-    
-  }
 }

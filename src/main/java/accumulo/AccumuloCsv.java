@@ -27,7 +27,7 @@ import com.beust.jcommander.JCommander;
 public class AccumuloCsv {
   private static final Logger log = LoggerFactory.getLogger(AccumuloCsv.class);
   
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     AccumuloCsvOptions opts = new AccumuloCsvOptions();
     JCommander jc = new JCommander();
     
@@ -41,10 +41,22 @@ public class AccumuloCsv {
       return;
     }
     
+    AccumuloCsvIngest task;
     if (opts.isBulkIngest()) {
-      AccumuloBulkCsv bulk = new AccumuloBulkCsv(opts);
+      task = new AccumuloBulkCsv(opts);
     } else if (opts.isLiveIngest()) {
-      
+      task = new AccumuloLiveCsv(opts);
+    } else {
+      log.warn("Nothing to do!");
+      return;
+    }
+    
+    try {
+      task.run();
+    } catch (Exception e) {
+      log.error("Error running ingest", e);
+    } finally {
+      task.close();
     }
     
     return;
