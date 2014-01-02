@@ -16,7 +16,6 @@
  */
 package accumulo;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -132,10 +131,9 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
     FileReader fileReader = null;
     CSVReader reader = null;
     final Text rowId = new Text();
+    long totalRecordsInserted = 0;
 
     for (File f : inputs.getInputFiles()) {
-      rowId.clear();
-
       String stringFileName;
       try {
         stringFileName = f.getCanonicalPath() + ROW_SEPARATOR;
@@ -181,6 +179,7 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
           while (null != (record = reader.readNext())) {
             // Make a rowId of "/path/to/filename:N"
             final String rowSuffix = Long.toString(recordCount);
+            rowId.clear();
             rowId.append(fileName.getBytes(), 0, fileName.getLength());
             rowId.append(rowSuffix.getBytes(), 0, rowSuffix.length());
 
@@ -193,12 +192,19 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
             }
 
             recordCount++;
+            totalRecordsInserted++;
+            
+            if (0 == totalRecordsInserted % 1000) {
+              mtbw.flush();
+            }
           }
         } catch (IOException e) {
           log.error("Error reading records from CSV file", e);
           continue;
+        } catch (MutationsRejectedException e) {
+          log.error("Error flushing mutations to server", e);
+          throw new RuntimeException(e);
         }
-
       } finally {
         if (null != reader) {
           try {
@@ -236,9 +242,6 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
 
       bw.addMutation(m);
     }
-
-    // TODO flush every Nth (or not at all?)
-    bw.flush();
   }
 
   protected void writeRecord(String[] header, String[] record, Text rowId, Text fileName) throws AccumuloException, AccumuloSecurityException {
@@ -283,9 +286,5 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
       schemaMutation.put(SCHEMA_COLUMN_FREQ, fileName, VALUE_ONE);
       schemaBw.addMutation(schemaMutation);
     }
-    
-    // TODO flush every Nth (or not at all?)
-    schemaBw.flush();
-    recordBw.flush();
   }
 }
