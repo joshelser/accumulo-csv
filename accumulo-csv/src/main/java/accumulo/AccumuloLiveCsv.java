@@ -16,10 +16,13 @@
  */
 package accumulo;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map.Entry;
 
@@ -28,6 +31,8 @@ import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.BatchWriter;
 import org.apache.accumulo.core.client.BatchWriterConfig;
 import org.apache.accumulo.core.client.Connector;
+import org.apache.accumulo.core.client.IteratorSetting;
+import org.apache.accumulo.core.client.IteratorSetting.Column;
 import org.apache.accumulo.core.client.MultiTableBatchWriter;
 import org.apache.accumulo.core.client.MutationsRejectedException;
 import org.apache.accumulo.core.client.TableExistsException;
@@ -37,8 +42,11 @@ import org.apache.accumulo.core.client.admin.TableOperations;
 import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.Value;
+import org.apache.accumulo.core.iterators.LongCombiner.Type;
+import org.apache.accumulo.core.iterators.user.SummingCombiner;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.WritableUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,6 +89,7 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
         tops.create(recordTableName);
       } catch (TableExistsException e) {
         // yay, race conditions
+        throw new RuntimeException(e);
       }
     }
 
@@ -89,7 +98,20 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
         tops.create(schemaTableName);
       } catch (TableExistsException e) {
         // yay, race conditions
+        throw new RuntimeException(e);
       }
+    }
+    
+    // Sum all values in the 'freq' column, before the VersioningIterator
+    IteratorSetting aggregation = new IteratorSetting(19, SummingCombiner.class);
+    SummingCombiner.setColumns(aggregation, Collections.<Column> singletonList(new Column(SCHEMA_COLUMN_FREQ)));
+    SummingCombiner.setEncodingType(aggregation, Type.VARLEN);
+    
+    try {
+      tops.attachIterator(schemaTableName, aggregation);
+    } catch (TableNotFoundException e) {
+      // yay, race conditions
+      throw new RuntimeException(e);
     }
 
     mtbw = connector.createMultiTableBatchWriter(new BatchWriterConfig());
@@ -134,15 +156,18 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
     long totalRecordsInserted = 0;
 
     for (File f : inputs.getInputFiles()) {
-      String stringFileName;
+      String absoluteFileName;
       try {
-        stringFileName = f.getCanonicalPath() + ROW_SEPARATOR;
+        absoluteFileName = f.getCanonicalPath();
       } catch (IOException e) {
         log.error("Could not determine path for file: {}", f, e);
         continue;
       }
       
-      Text fileName = new Text(stringFileName);
+      log.info("Starting to process {}", absoluteFileName);
+      
+      absoluteFileName += ROW_SEPARATOR;
+      Text fileName = new Text(absoluteFileName);
 
       try {
         try {
@@ -204,8 +229,11 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
         } catch (MutationsRejectedException e) {
           log.error("Error flushing mutations to server", e);
           throw new RuntimeException(e);
+        } finally {
+          log.info("Processed {} records from {}", recordCount, absoluteFileName);
         }
       } finally {
+        
         if (null != reader) {
           try {
             reader.close();
@@ -223,6 +251,8 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
         }
       }
     }
+    
+    log.info("Processed {} records in total", totalRecordsInserted);
   }
 
   protected void writeSchema(Text fileName, String[] header) throws AccumuloException, AccumuloSecurityException {
@@ -283,8 +313,23 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
     // update counts in schema
     for (Entry<String,Long> schemaUpdate : counts.entrySet()) {
       Mutation schemaMutation = new Mutation(schemaUpdate.getKey());
-      schemaMutation.put(SCHEMA_COLUMN_FREQ, fileName, VALUE_ONE);
+      
+      schemaMutation.put(SCHEMA_COLUMN_FREQ, fileName, longToValue(schemaUpdate.getValue()));
       schemaBw.addMutation(schemaMutation);
     }
+  }
+  
+  protected Value longToValue(long l) {
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    DataOutputStream dos = new DataOutputStream(baos);
+    
+    try {
+      WritableUtils.writeVLong(dos, l);
+    } catch (IOException e) {
+      log.error("IOException writing to a byte array...", e);
+      throw new RuntimeException(e);
+    }
+    
+    return new Value(baos.toByteArray());
   }
 }
