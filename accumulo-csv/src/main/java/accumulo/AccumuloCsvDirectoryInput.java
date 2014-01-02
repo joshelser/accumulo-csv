@@ -17,6 +17,11 @@
 package accumulo;
 
 import java.io.File;
+import java.util.HashSet;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
 
@@ -24,7 +29,7 @@ import com.google.common.base.Preconditions;
  * 
  */
 public class AccumuloCsvDirectoryInput implements AccumuloCsvInput {
-
+  private static final Logger log = LoggerFactory.getLogger(AccumuloCsvDirectoryInput.class);
   protected final File directory;
   
   public AccumuloCsvDirectoryInput(File dir) {
@@ -35,6 +40,23 @@ public class AccumuloCsvDirectoryInput implements AccumuloCsvInput {
 
   @Override
   public Iterable<File> getInputFiles() {
-    throw new UnsupportedOperationException();
+    Set<File> files = new HashSet<File>();
+    getFiles(files, directory);
+    return files;
+  }
+  
+  protected void getFiles(Set<File> files, File f) {
+    for (String child : f.list()) {
+      File childFile = new File(f, child);
+      if (files.contains(childFile)) {
+        // continue
+      } else if (childFile.isDirectory()) {
+        getFiles(files, childFile);
+      } else if (childFile.isFile()) {
+        files.add(childFile);
+      } else {
+        log.warn("Ignoring {} because it's not a file nor directory.", childFile);
+      }
+    }
   }
 }
