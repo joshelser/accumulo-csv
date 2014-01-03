@@ -16,8 +16,6 @@
  */
 package accumulo.ingest;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -46,7 +44,6 @@ import org.apache.accumulo.core.iterators.LongCombiner.Type;
 import org.apache.accumulo.core.iterators.user.SummingCombiner;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.WritableUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,7 +57,7 @@ import com.google.common.base.Preconditions;
 /**
  * 
  */
-public class AccumuloLiveCsv implements AccumuloCsvIngest {
+public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
   private static final Logger log = LoggerFactory.getLogger(AccumuloLiveCsv.class);
   private static final String ROW_SEPARATOR = ":";
 
@@ -71,17 +68,14 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
 
   protected final ZooKeeperInstance instance;
   protected final Connector connector;
-  protected final AccumuloCsvInput inputs;
   protected final String recordTableName, schemaTableName;
   protected final MultiTableBatchWriter mtbw;
 
   public AccumuloLiveCsv(AccumuloCsvOptions opts) throws AccumuloException, AccumuloSecurityException {
-    validate(opts);
+    super(opts);
 
     instance = new ZooKeeperInstance(opts.getInstanceName(), opts.getZookeepers());
     connector = instance.getConnector(opts.getUsername(), new PasswordToken(opts.getPassword()));
-
-    inputs = AccumuloCsvInputFactory.getInput(opts.getInputFile());
 
     recordTableName = opts.getTablePrefix() + "_records";
     schemaTableName = opts.getTablePrefix() + "_schema";
@@ -127,6 +121,7 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
     }
   }
 
+  @Override
   protected void validate(AccumuloCsvOptions opts) {
     if (null == opts.getInstanceName() || null == opts.getZookeepers() || null == opts.getUsername() || null == opts.getPassword()) {
       log.error("Must provide instance name, zookeepers, username and password");
@@ -202,11 +197,8 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
 
         try {
           while (null != (record = reader.readNext())) {
-            // Make a rowId of "/path/to/filename:N"
-            final String rowSuffix = Long.toString(recordCount);
-            rowId.clear();
-            rowId.append(fileName.getBytes(), 0, fileName.getLength());
-            rowId.append(rowSuffix.getBytes(), 0, rowSuffix.length());
+            // Make a unique row id from the filename and record offset
+            setRowId(rowId, fileName, recordCount);
 
             try {
               writeRecord(header, record, rowId, fileName);
@@ -318,18 +310,5 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
       schemaBw.addMutation(schemaMutation);
     }
   }
-  
-  protected Value longToValue(long l) {
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    DataOutputStream dos = new DataOutputStream(baos);
-    
-    try {
-      WritableUtils.writeVLong(dos, l);
-    } catch (IOException e) {
-      log.error("IOException writing to a byte array...", e);
-      throw new RuntimeException(e);
-    }
-    
-    return new Value(baos.toByteArray());
-  }
+
 }

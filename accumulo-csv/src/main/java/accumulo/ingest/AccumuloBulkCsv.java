@@ -23,10 +23,17 @@ import accumulo.AccumuloCsvOptions;
 /**
  * 
  */
-public class AccumuloBulkCsv implements AccumuloCsvIngest {
+public class AccumuloBulkCsv extends AbstractAccumuloCsvIngest {
 
   public AccumuloBulkCsv(AccumuloCsvOptions opts) {
+    super(opts);
     
+    // other stuff
+  }
+  
+  @Override
+  protected void validate(AccumuloCsvOptions opts) {
+    // validate
   }
 
   @Override
