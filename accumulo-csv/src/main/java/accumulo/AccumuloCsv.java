@@ -19,6 +19,10 @@ package accumulo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import accumulo.ingest.AccumuloBulkCsv;
+import accumulo.ingest.AccumuloCsvIngest;
+import accumulo.ingest.AccumuloLiveCsv;
+
 import com.beust.jcommander.JCommander;
 
 /**

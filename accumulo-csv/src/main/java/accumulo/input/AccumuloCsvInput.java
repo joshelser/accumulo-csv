@@ -14,30 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package accumulo;
+package accumulo.input;
 
 import java.io.File;
-import java.util.Collections;
-
-import com.google.common.base.Preconditions;
 
 /**
  * 
  */
-public class AccumuloCsvFileInput implements AccumuloCsvInput {
+public interface AccumuloCsvInput {
 
-  protected final File file;
+  public Iterable<File> getInputFiles();
   
-  public AccumuloCsvFileInput(File input) {
-    Preconditions.checkNotNull(input);
-    Preconditions.checkArgument(input.exists() && input.isFile() && input.canRead());
-    
-    file = input;
-  }
-  
-  @Override
-  public Iterable<File> getInputFiles() {
-    return Collections.singleton(file);
-  }
-
 }

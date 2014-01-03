@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package accumulo;
+package accumulo.ingest;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -50,6 +50,9 @@ import org.apache.hadoop.io.WritableUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import accumulo.AccumuloCsvOptions;
+import accumulo.input.AccumuloCsvInput;
+import accumulo.input.AccumuloCsvInputFactory;
 import au.com.bytecode.opencsv.CSVReader;
 
 import com.google.common.base.Preconditions;
@@ -96,22 +99,19 @@ public class AccumuloLiveCsv implements AccumuloCsvIngest {
     if (!tops.exists(schemaTableName)) {
       try {
         tops.create(schemaTableName);
+
+        // Sum all values in the 'freq' column, before the VersioningIterator
+        IteratorSetting aggregation = new IteratorSetting(19, SummingCombiner.class);
+        SummingCombiner.setColumns(aggregation, Collections.<Column> singletonList(new Column(SCHEMA_COLUMN_FREQ)));
+        SummingCombiner.setEncodingType(aggregation, Type.VARLEN);
+        tops.attachIterator(schemaTableName, aggregation);
       } catch (TableExistsException e) {
         // yay, race conditions
         throw new RuntimeException(e);
+      } catch (TableNotFoundException e) {
+        // yay, race conditions
+        throw new RuntimeException(e);
       }
-    }
-    
-    // Sum all values in the 'freq' column, before the VersioningIterator
-    IteratorSetting aggregation = new IteratorSetting(19, SummingCombiner.class);
-    SummingCombiner.setColumns(aggregation, Collections.<Column> singletonList(new Column(SCHEMA_COLUMN_FREQ)));
-    SummingCombiner.setEncodingType(aggregation, Type.VARLEN);
-    
-    try {
-      tops.attachIterator(schemaTableName, aggregation);
-    } catch (TableNotFoundException e) {
-      // yay, race conditions
-      throw new RuntimeException(e);
     }
 
     mtbw = connector.createMultiTableBatchWriter(new BatchWriterConfig());

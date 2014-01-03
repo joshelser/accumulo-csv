@@ -14,15 +14,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package accumulo;
+package accumulo.ingest;
 
-import java.io.File;
+import java.io.IOException;
+
+import accumulo.AccumuloCsvOptions;
 
 /**
  * 
  */
-public interface AccumuloCsvInput {
+public class AccumuloBulkCsv implements AccumuloCsvIngest {
 
-  public Iterable<File> getInputFiles();
-  
+  public AccumuloBulkCsv(AccumuloCsvOptions opts) {
+    
+  }
+
+  @Override
+  public void run() {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void close() throws IOException {
+    // TODO Auto-generated method stub
+    
+  }
 }

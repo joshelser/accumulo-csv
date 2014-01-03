@@ -14,26 +14,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package accumulo;
+package accumulo.input;
 
 import java.io.File;
+import java.util.Collections;
 
 import com.google.common.base.Preconditions;
 
 /**
  * 
  */
-public class AccumuloCsvInputFactory {
+public class AccumuloCsvFileInput implements AccumuloCsvInput {
 
-  public static AccumuloCsvInput getInput(File f) {
-    Preconditions.checkNotNull(f);
+  protected final File file;
+  
+  public AccumuloCsvFileInput(File input) {
+    Preconditions.checkNotNull(input);
+    Preconditions.checkArgument(input.exists() && input.isFile() && input.canRead());
     
-    if (f.isDirectory()) {
-      return new AccumuloCsvDirectoryInput(f);
-    } else if (f.isFile()) {
-      return new AccumuloCsvFileInput(f);
-    } else {
-      throw new UnsupportedOperationException("Input was not a file nor directory");
-    }
+    file = input;
   }
+  
+  @Override
+  public Iterable<File> getInputFiles() {
+    return Collections.singleton(file);
+  }
+
 }
