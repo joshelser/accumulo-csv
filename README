@@ -1,1 +1,4 @@
 Ingest CSV records into Accumulo
+
+This project is licensed under the Apache Software License, version 2. Refer
+to the accompanying LICENSE file for details on the software license.
