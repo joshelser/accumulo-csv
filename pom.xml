@@ -2,13 +2,16 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.accumulo</groupId>
-  <artifactId>accumulo-csv-parent</artifactId>
+  <artifactId>accumulo-csv-project</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <packaging>pom</packaging>
   <modules>
     <module>accumulo-csv</module>
     <module>accumulo-csv-assembly</module>
   </modules>
+  <properties>
+    <accumulo.version>1.6.0</accumulo.version>
+  </properties>
   <build>
     <pluginManagement>
       <plugins>
@@ -21,8 +24,8 @@
           <artifactId>maven-compiler-plugin</artifactId>
           <version>3.1</version>
           <configuration>
-            <source>1.6</source>
-            <target>1.6</target>
+            <source>1.7</source>
+            <target>1.7</target>
             <optimize>true</optimize>
             <encoding>UTF-8</encoding>
           </configuration>
@@ -50,7 +53,7 @@
       <dependency>
         <groupId>org.apache.accumulo</groupId>
         <artifactId>accumulo-core</artifactId>
-        <version>1.6.0-SNAPSHOT</version>
+        <version>${accumulo.version}</version>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
@@ -80,7 +83,7 @@
       <dependency>
         <groupId>org.apache.accumulo</groupId>
         <artifactId>accumulo-minicluster</artifactId>
-        <version>1.6.0-SNAPSHOT</version>
+        <version>${accumulo.version}</version>
       </dependency>
       <dependency>
         <groupId>junit</groupId>
