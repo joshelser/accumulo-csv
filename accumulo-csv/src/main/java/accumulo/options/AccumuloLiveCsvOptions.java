@@ -14,32 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package accumulo.ingest;
-
-import java.io.IOException;
+package accumulo.options;
 
 import accumulo.input.AccumuloCsvOptions;
 
+import com.beust.jcommander.Parameter;
+
 /**
- * 
+ *
  */
-public class AccumuloBulkCsv extends AbstractAccumuloCsvIngest {
+public class AccumuloLiveCsvOptions extends AccumuloCsvOptions {
 
-  public AccumuloBulkCsv(AccumuloCsvOptions opts) {
-    super(opts);
-    
-    // other stuff
-  }
-  
-  @Override
-  public void run() {
-    // TODO Auto-generated method stub
-    
-  }
+  @Parameter(names = {"-t", "--tablePrefix"}, required = true, description = "Prefix to use for Accumulo table names")
+  private String tablePrefix;
 
-  @Override
-  public void close() throws IOException {
-    // TODO Auto-generated method stub
-    
+  public String getTablePrefix() {
+    return tablePrefix;
   }
 }

@@ -14,41 +14,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package accumulo;
+package accumulo.input;
 
 import java.io.File;
+
+import org.apache.accumulo.core.cli.ClientOpts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.beust.jcommander.Parameter;
 
 /**
- * 
+ *
  */
-public class AccumuloCsvOptions {
+public class AccumuloCsvOptions extends ClientOpts {
+  private static final Logger log = LoggerFactory.getLogger(AccumuloCsvOptions.class);
 
-  @Parameter(names = "--live", required = false, description = "Write mutations to Accumulo")
+  private static final String LIVE = "--live", BULK = "--bulk";
+
+  @Parameter(names = LIVE, required = false, description = "Write mutations to Accumulo")
   private boolean liveIngest;
 
-  @Parameter(names = "--bulk", required = false, description = "Create offline Accumulo files for import")
+  @Parameter(names = BULK, required = false, description = "Create offline Accumulo files for import")
   private boolean bulkIngest;
-  
+
   @Parameter(names = {"-f", "--file"}, required = true, description = "Input CSV file(s)")
   private File inputFile;
-  
-  @Parameter(names = {"-zk", "--zookeepers"}, required = false, description = "CSV of ZooKeepers")
-  private String zookeepers;
-  
-  @Parameter(names = {"-i", "--instance"}, required = false, description = "Accumulo instance name")
-  private String instanceName;
-  
-  @Parameter(names = {"-u", "--user"}, required = false, description = "Accumulo user name")
-  private String username;
-  
-  @Parameter(names = {"-p", "--password"}, required = false, description = "Accumulo password")
-  private String password;
-  
-  @Parameter(names = {"-t", "--tablePrefix"}, required = false, description = "Prefix to use for Accumulo table names")
-  private String tablePrefix;
-  
+
   public boolean isLiveIngest() {
     return liveIngest;
   }
@@ -60,24 +52,28 @@ public class AccumuloCsvOptions {
   public File getInputFile() {
     return inputFile;
   }
-  
-  public String getZookeepers() {
-    return zookeepers;
+
+  @Override
+  public void parseArgs(String programName, String[] args, Object... others) {
+    super.parseArgs(programName, args, others);
+    checkExclusiveIngestTypes();
+    if (isLiveIngest()) {
+      validateLiveIngestOptions();
+    }
   }
-  
-  public String getInstanceName() {
-    return instanceName;
+
+  /**
+   * One of Live or Bulk ingest are required and both are exclusive
+   */
+  protected void checkExclusiveIngestTypes() {
+    if ((isBulkIngest() && isLiveIngest()) || (!isBulkIngest() && !isLiveIngest())) {
+      log.error("Must chose one of {} or {}", LIVE, BULK);
+      System.exit(1);
+      return;
+    }
   }
-  
-  public String getUsername() {
-    return username;
-  }
-  
-  public String getPassword() {
-    return password;
-  }
-  
-  public String getTablePrefix() {
-    return tablePrefix;
+
+  protected void validateLiveIngestOptions() {
+
   }
 }

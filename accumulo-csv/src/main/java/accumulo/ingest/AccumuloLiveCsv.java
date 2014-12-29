@@ -35,27 +35,22 @@ import org.apache.accumulo.core.client.MultiTableBatchWriter;
 import org.apache.accumulo.core.client.MutationsRejectedException;
 import org.apache.accumulo.core.client.TableExistsException;
 import org.apache.accumulo.core.client.TableNotFoundException;
-import org.apache.accumulo.core.client.ZooKeeperInstance;
 import org.apache.accumulo.core.client.admin.TableOperations;
-import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.iterators.LongCombiner.Type;
 import org.apache.accumulo.core.iterators.user.SummingCombiner;
-import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.io.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import accumulo.AccumuloCsvOptions;
-import accumulo.input.AccumuloCsvInput;
-import accumulo.input.AccumuloCsvInputFactory;
+import accumulo.options.AccumuloLiveCsvOptions;
 import au.com.bytecode.opencsv.CSVReader;
 
 import com.google.common.base.Preconditions;
 
 /**
- * 
+ *
  */
 public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
   private static final Logger log = LoggerFactory.getLogger(AccumuloLiveCsv.class);
@@ -66,16 +61,14 @@ public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
   public static final Text EMPTY_TEXT = new Text(new byte[0]);
   public static final Value VALUE_ONE = new Value("1".getBytes());
 
-  protected final ZooKeeperInstance instance;
   protected final Connector connector;
   protected final String recordTableName, schemaTableName;
   protected final MultiTableBatchWriter mtbw;
 
-  public AccumuloLiveCsv(AccumuloCsvOptions opts) throws AccumuloException, AccumuloSecurityException {
+  public AccumuloLiveCsv(AccumuloLiveCsvOptions opts) throws AccumuloException, AccumuloSecurityException {
     super(opts);
 
-    instance = new ZooKeeperInstance(opts.getInstanceName(), opts.getZookeepers());
-    connector = instance.getConnector(opts.getUsername(), new PasswordToken(opts.getPassword()));
+    connector = opts.getConnector();
 
     recordTableName = opts.getTablePrefix() + "_records";
     schemaTableName = opts.getTablePrefix() + "_schema";
@@ -122,28 +115,6 @@ public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
   }
 
   @Override
-  protected void validate(AccumuloCsvOptions opts) {
-    if (null == opts.getInstanceName() || null == opts.getZookeepers() || null == opts.getUsername() || null == opts.getPassword()) {
-      log.error("Must provide instance name, zookeepers, username and password");
-      System.exit(1);
-      return;
-    }
-
-    File inputFile = opts.getInputFile();
-    if (null == inputFile || !inputFile.exists()) {
-      log.error("Must provide input file or directory");
-      System.exit(2);
-      return;
-    }
-
-    if (StringUtils.isBlank(opts.getTablePrefix())) {
-      log.error("Must provide non-empty table prefix");
-      System.exit(3);
-      return;
-    }
-  }
-
-  @Override
   public void run() {
     FileReader fileReader = null;
     CSVReader reader = null;
@@ -158,9 +129,9 @@ public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
         log.error("Could not determine path for file: {}", f, e);
         continue;
       }
-      
+
       log.info("Starting to process {}", absoluteFileName);
-      
+
       absoluteFileName += ROW_SEPARATOR;
       Text fileName = new Text(absoluteFileName);
 
@@ -210,7 +181,7 @@ public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
 
             recordCount++;
             totalRecordsInserted++;
-            
+
             if (0 == totalRecordsInserted % 1000) {
               mtbw.flush();
             }
@@ -225,7 +196,7 @@ public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
           log.info("Processed {} records from {}", recordCount, absoluteFileName);
         }
       } finally {
-        
+
         if (null != reader) {
           try {
             reader.close();
@@ -243,7 +214,7 @@ public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
         }
       }
     }
-    
+
     log.info("Processed {} records in total", totalRecordsInserted);
   }
 
@@ -267,9 +238,9 @@ public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
   }
 
   protected void writeRecord(String[] header, String[] record, Text rowId, Text fileName) throws AccumuloException, AccumuloSecurityException {
-    Preconditions.checkArgument(header.length >= record.length, "Cannot have more columns in record (%s) than defined in header (%s)", 
+    Preconditions.checkArgument(header.length >= record.length, "Cannot have more columns in record (%s) than defined in header (%s)",
         new Object[] { header.length, record.length});
-    
+
     final BatchWriter recordBw, schemaBw;
     try {
       recordBw = mtbw.getBatchWriter(recordTableName);
@@ -282,30 +253,30 @@ public class AccumuloLiveCsv extends AbstractAccumuloCsvIngest {
     // Some temp Texts to avoid lots of object allocations
     final Text cfHolder = new Text();
     final HashMap<String,Long> counts = new HashMap<String,Long>();
-    
+
     // write records
     Mutation recordMutation = new Mutation(rowId);
     for (int i = 0; i < record.length; i++) {
       final String columnName = header[i];
       final String columnValue = record[i];
-      
+
       if (counts.containsKey(columnName)) {
         counts.put(columnName, counts.get(columnName) + 1);
       } else {
         counts.put(columnName, 1l);
       }
-      
+
       cfHolder.set(columnName);
-      
+
       recordMutation.put(cfHolder, EMPTY_TEXT, new Value(columnValue.getBytes()));
     }
-    
+
     recordBw.addMutation(recordMutation);
-    
+
     // update counts in schema
     for (Entry<String,Long> schemaUpdate : counts.entrySet()) {
       Mutation schemaMutation = new Mutation(schemaUpdate.getKey());
-      
+
       schemaMutation.put(SCHEMA_COLUMN_FREQ, fileName, longToValue(schemaUpdate.getValue()));
       schemaBw.addMutation(schemaMutation);
     }

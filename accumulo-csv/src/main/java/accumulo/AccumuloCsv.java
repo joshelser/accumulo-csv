@@ -22,39 +22,36 @@ import org.slf4j.LoggerFactory;
 import accumulo.ingest.AccumuloBulkCsv;
 import accumulo.ingest.AccumuloCsvIngest;
 import accumulo.ingest.AccumuloLiveCsv;
-
-import com.beust.jcommander.JCommander;
+import accumulo.input.AccumuloCsvOptions;
+import accumulo.options.AccumuloBulkCsvOptions;
+import accumulo.options.AccumuloLiveCsvOptions;
 
 /**
- * 
+ *
  */
 public class AccumuloCsv {
   private static final Logger log = LoggerFactory.getLogger(AccumuloCsv.class);
-  
+
   public static void main(String[] args) throws Exception {
     AccumuloCsvOptions opts = new AccumuloCsvOptions();
-    JCommander jc = new JCommander(opts);
-    
-    jc.setProgramName("Accumulo CSV");
-    
-    jc.parse(args);
-    
-    if ((opts.isBulkIngest() && opts.isLiveIngest()) || (!opts.isBulkIngest() && !opts.isLiveIngest())) {
-      log.error("Must chose one of --live or --bulk");
-      System.exit(1);
-      return;
-    }
-    
+
+    // Initial parse to get what type of ingest to run
+    opts.parseArgs("Accumulo CSV", args);
+
     AccumuloCsvIngest task;
     if (opts.isBulkIngest()) {
-      task = new AccumuloBulkCsv(opts);
+      AccumuloBulkCsvOptions bulkOpts = new AccumuloBulkCsvOptions();
+      bulkOpts.parseArgs("Accumulo Bulk CSV Ingest", args);
+      task = new AccumuloBulkCsv(bulkOpts);
     } else if (opts.isLiveIngest()) {
-      task = new AccumuloLiveCsv(opts);
+      AccumuloLiveCsvOptions liveOpts = new AccumuloLiveCsvOptions();
+      liveOpts.parseArgs("Accumulo Live CSV Ingest", args, new AccumuloLiveCsvOptions());
+      task = new AccumuloLiveCsv(liveOpts);
     } else {
       log.warn("Nothing to do!");
       return;
     }
-    
+
     try {
       task.run();
     } catch (Exception e) {
@@ -62,7 +59,7 @@ public class AccumuloCsv {
     } finally {
       task.close();
     }
-    
+
     return;
   }
 }
